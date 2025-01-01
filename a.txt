@@ -1,29 +1,26 @@
-import os
+import pygame
 import ctypes
 import time
 import threading
-from pynput import keyboard
-import tkinter as tk
-from tkinter import messagebox
+import sys
 
-# Funktion zum Installieren der benötigten Pakete (falls noch nicht installiert)
-def install_packages(packages):
-    """
-    Installiert eine Liste von Python-Paketen mit pip.
-    """
-    for package in packages:
-        try:
-            print(f"Installiere {package}...")
-            subprocess.check_call([sys.executable, "-m", "pip", "install", package])
-            print(f"{package} erfolgreich installiert.\n")
-        except subprocess.CalledProcessError as e:
-            print(f"Fehler beim Installieren von {package}: {e}\n")
+# Initialisierung von pygame
+pygame.init()
 
-# Notwendige Pakete installieren
-install_packages(["pynput"])
+# Bildschirmgröße auf Vollbild setzen
+info = pygame.display.Info()  # Holen Sie sich die Bildschirmauflösung
+screen = pygame.display.set_mode((info.current_w, info.current_h), pygame.FULLSCREEN)
 
-# Globale Variablen
-password = "sicherespasswort"  # Passwort, das zur Entsperrung erforderlich ist
+# Farben definieren
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+
+# Schriftarten laden
+font = pygame.font.SysFont('arial', 48)
+
+# Passwort und Statusvariablen
+correct_password = "sicherespasswort"
+entered_password = ""
 attempts = 0  # Anzahl der falschen Versuche
 max_attempts = 3  # Maximale erlaubte Fehlversuche
 alarm_triggered = False  # Zustand des Alarms
@@ -57,82 +54,84 @@ def trigger_alarm():
     print("ALARM ausgelöst! Starte RAM-Bereinigung...")
     wipe_ram()
 
-# Passwortprüfung in der GUI
-def check_password_gui():
-    global attempts, alarm_triggered
-    entered_password = password_entry.get()
-    if entered_password == password:
-        status_label.config(text="System entsperrt!", fg="green")
-        alarm_triggered = False
-    else:
-        attempts += 1
-        status_label.config(text=f"Falsches Passwort! Versuch {attempts}/{max_attempts}", fg="red")
-        if attempts >= max_attempts:
-            status_label.config(text="Maximale Versuche erreicht! ALARM!", fg="red")
-            trigger_alarm()
+# Funktion zum Zeichnen des Passworttextes
+def draw_password_input():
+    screen.fill(BLACK)
+    # Text für Passwortaufforderung
+    prompt_text = font.render("Bitte Passwort eingeben:", True, WHITE)
+    screen.blit(prompt_text, (50, 50))
+    
+    # Text für das eingegebene Passwort (gekennzeichnet durch Sterne)
+    display_password = "*" * len(entered_password)
+    password_text = font.render(display_password, True, WHITE)
+    screen.blit(password_text, (50, 150))
+    
+    pygame.display.flip()
 
-# USB-Kill-Switch
+# Passwortprüfung
+def check_password():
+    global entered_password, attempts, alarm_triggered
+    while True:
+        if alarm_triggered:
+            break
+        draw_password_input()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:  # Escape zum Schließen
+                    pygame.quit()
+                    sys.exit()
+                elif event.key == pygame.K_BACKSPACE:  # Backspace zum Löschen
+                    entered_password = entered_password[:-1]
+                elif event.key == pygame.K_RETURN:  # Enter für Passwortüberprüfung
+                    if entered_password == correct_password:
+                        print("Passwort korrekt! System entsperrt.")
+                        alarm_triggered = False
+                        break
+                    else:
+                        print("Falsches Passwort!")
+                        attempts += 1
+                        if attempts >= max_attempts:
+                            trigger_alarm()
+                            break
+                        entered_password = ""  # Passwort zurücksetzen
+                else:  # Andernfalls Zeichen hinzufügen
+                    entered_password += event.unicode
+
+# USB-Kill-Switch (Simuliert)
 def monitor_usb():
+    global alarm_triggered
     print("USB-Kill-Switch-Überwachung aktiv.")
     while not alarm_triggered:
-        if os.path.exists("usb_kill_signal.txt"):  # Dummy-Trigger
-            print("USB-Kill-Switch erkannt!")
-            trigger_alarm()
-            break
-        time.sleep(1)
+        # Simulierte Bedingung, um den Kill-Switch auszulösen
+        # Beispiel: Falls eine Datei "usb_kill_signal.txt" existiert, wird der Alarm ausgelöst.
+        try:
+            with open("usb_kill_signal.txt", "r"):
+                print("USB-Kill-Switch erkannt!")
+                trigger_alarm()
+                break
+        except FileNotFoundError:
+            time.sleep(1)
 
 # Keylogger-Schutz
 def prevent_keylogger():
-    def on_press(key):
-        if alarm_triggered:
-            return False
-    listener = keyboard.Listener(on_press=on_press)
-    listener.start()
+    # Dies könnte erweitert werden, aber für jetzt ist es eine Platzhalter-Funktion
+    print("Keylogger-Schutz aktiviert.")
 
-# Automatischer Schutz bei Programmstart
-def auto_protect():
-    print("Automatischer Schutz aktiv. Geben Sie Ihr Passwort ein.")
+# Hauptprogramm
+def main():
+    global alarm_triggered
+    # Starte automatische Schutzfunktionen
     threading.Thread(target=monitor_usb).start()  # USB-Kill-Switch überwachen
     threading.Thread(target=prevent_keylogger).start()  # Keylogger-Schutz aktivieren
+    check_password()  # Passwortschutz starten
 
-# Funktion zum Schließen der Anwendung mit Bestätigung
-def on_close():
     if not alarm_triggered:
-        if messagebox.askokcancel("Beenden", "Möchten Sie das Programm wirklich beenden?"):
-            root.destroy()
+        print("Schutzprogramm ist aktiv. Sie können sicher arbeiten.")
     else:
-        messagebox.showinfo("Alarm", "Das Programm kann nicht geschlossen werden, da der Alarm ausgelöst wurde.")
-
-# Hauptprogramm mit GUI (Tkinter)
-def main():
-    global password_entry, status_label, root
-
-    # Erstelle das Hauptfenster (Full-Screen)
-    root = tk.Tk()
-    root.title("Schutzprogramm")
-    root.attributes("-fullscreen", True)  # Fullscreen-Modus
-    root.configure(bg='black')
-
-    # Status Label
-    status_label = tk.Label(root, text="Bitte Passwort eingeben:", font=("Helvetica", 30), fg="white", bg="black")
-    status_label.pack(pady=50)
-
-    # Passwort Eingabefeld
-    password_entry = tk.Entry(root, font=("Helvetica", 30), show="*", bd=5)
-    password_entry.pack(pady=20)
-
-    # Bestätigungsbutton
-    submit_button = tk.Button(root, text="Eingeben", font=("Helvetica", 30), command=check_password_gui, bd=5)
-    submit_button.pack(pady=50)
-
-    # Verhindere das Schließen des Fensters
-    root.protocol("WM_DELETE_WINDOW", on_close)
-
-    # Starte den automatischen Schutz im Hintergrund
-    auto_protect()
-
-    # Hauptloop für das GUI
-    root.mainloop()
+        print("Schutzprogramm beendet aufgrund eines Alarms.")
 
 if __name__ == "__main__":
     main()
