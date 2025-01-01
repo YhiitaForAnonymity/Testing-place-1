@@ -1,0 +1,128 @@
+import os
+import ctypes
+import time
+import threading
+from pynput import keyboard
+import subprocess
+import sys
+import tkinter as tk
+
+# Funktion zum Installieren der benötigten Pakete (falls noch nicht installiert)
+def install_packages(packages):
+    """
+    Installiert eine Liste von Python-Paketen mit pip.
+    """
+    for package in packages:
+        try:
+            print(f"Installiere {package}...")
+            subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+            print(f"{package} erfolgreich installiert.\n")
+        except subprocess.CalledProcessError as e:
+            print(f"Fehler beim Installieren von {package}: {e}\n")
+
+# Notwendige Pakete installieren
+install_packages(["pynput"])
+
+# Globale Variablen
+password = "sicherespasswort"  # Passwort, das zur Entsperrung erforderlich ist
+attempts = 0  # Anzahl der falschen Versuche
+max_attempts = 3  # Maximale erlaubte Fehlversuche
+alarm_triggered = False  # Zustand des Alarms
+
+# RAM-Bereinigung (Multi-Threaded)
+def wipe_ram():
+    try:
+        print("Starte RAM-Bereinigung...")
+        buffer = ctypes.create_string_buffer(b'\x00' * 4096)  # 4KB Nullbytes
+        def wipe_segment():
+            for _ in range(10000):  # Wiederholungen je nach RAM-Größe
+                ctypes.memset(ctypes.addressof(buffer), 0, len(buffer))
+                time.sleep(0.001)  # CPU-Last reduzieren
+        
+        threads = []
+        for _ in range(8):  # 8 Threads für parallele Bereinigung
+            thread = threading.Thread(target=wipe_segment)
+            threads.append(thread)
+            thread.start()
+
+        for thread in threads:
+            thread.join()
+        print("RAM erfolgreich bereinigt.")
+    except Exception as e:
+        print(f"Fehler bei der RAM-Bereinigung: {e}")
+
+# Alarm auslösen
+def trigger_alarm():
+    global alarm_triggered
+    alarm_triggered = True
+    print("ALARM ausgelöst! Starte RAM-Bereinigung...")
+    wipe_ram()
+
+# Passwortprüfung in der GUI
+def check_password_gui():
+    global attempts, alarm_triggered
+    entered_password = password_entry.get()
+    if entered_password == password:
+        status_label.config(text="System entsperrt!", fg="green")
+        alarm_triggered = False
+    else:
+        attempts += 1
+        status_label.config(text=f"Falsches Passwort! Versuch {attempts}/{max_attempts}", fg="red")
+        if attempts >= max_attempts:
+            status_label.config(text="Maximale Versuche erreicht! ALARM!", fg="red")
+            trigger_alarm()
+
+# USB-Kill-Switch
+def monitor_usb():
+    print("USB-Kill-Switch-Überwachung aktiv.")
+    while not alarm_triggered:
+        if os.path.exists("usb_kill_signal.txt"):  # Dummy-Trigger
+            print("USB-Kill-Switch erkannt!")
+            trigger_alarm()
+            break
+        time.sleep(1)
+
+# Keylogger-Schutz
+def prevent_keylogger():
+    def on_press(key):
+        if alarm_triggered:
+            return False
+    listener = keyboard.Listener(on_press=on_press)
+    listener.start()
+
+# Automatischer Schutz bei Programmstart
+def auto_protect():
+    print("Automatischer Schutz aktiv. Geben Sie Ihr Passwort ein.")
+    threading.Thread(target=monitor_usb).start()  # USB-Kill-Switch überwachen
+    threading.Thread(target=prevent_keylogger).start()  # Keylogger-Schutz aktivieren
+
+# Hauptprogramm mit GUI (Tkinter)
+def main():
+    global password_entry, status_label
+
+    # Erstelle das Hauptfenster (Full-Screen)
+    root = tk.Tk()
+    root.title("Schutzprogramm")
+    root.attributes("-fullscreen", True)  # Fullscreen-Modus
+    root.configure(bg='black')
+
+    # Status Label
+    status_label = tk.Label(root, text="Bitte Passwort eingeben:", font=("Helvetica", 30), fg="white", bg="black")
+    status_label.pack(pady=50)
+
+    # Passwort Eingabefeld
+    password_entry = tk.Entry(root, font=("Helvetica", 30), show="*", bd=5)
+    password_entry.pack(pady=20)
+
+    # Bestätigungsbutton
+    submit_button = tk.Button(root, text="Eingeben", font=("Helvetica", 30), command=check_password_gui, bd=5)
+    submit_button.pack(pady=50)
+
+    # Starte den automatischen Schutz im Hintergrund
+    auto_protect()
+
+    # Hauptloop für das GUI
+    root.mainloop()
+
+if __name__ == "__main__":
+    main()
